@@ -1,0 +1,125 @@
+name: Android Release Build
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build_release_apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Generate debug keystore (CI signing)
+        run: |
+          mkdir -p app/signing
+          keytool -genkey -v \
+            -keystore app/signing/signing-key.jks \
+            -alias regain \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Regain, OU=Dev, O=Ryzix, L=IN, ST=IN, C=IN" \
+            -storepass "${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}" \
+            -keypass "${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}"
+
+      - name: Write local.properties
+        run: |
+          echo "signing.storeFile=signing/signing-key.jks" >> local.properties
+          echo "signing.storePassword=${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}" >> local.properties
+          echo "signing.keyAlias=regain" >> local.properties
+          echo "signing.keyPassword=${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}" >> local.properties
+
+      - name: Auto-bump versionCode
+        id: version
+        run: |
+          BUILD_NUM=${{ github.run_number }}
+          echo "BUILD_NUMBER=$BUILD_NUM" >> $GITHUB_ENV
+          # Extract versionName from build.gradle.kts
+          VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | grep -o '"[^"]*"' | tr -d '"' | head -1 || echo "1.$BUILD_NUM.0")
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "code=$BUILD_NUM" >> $GITHUB_OUTPUT
+
+      - name: Assemble Release APK
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk dist/Regain-v${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Regain-APK-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          path: dist/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}-build.${{ steps.version.outputs.code }}
+          name: "Regain v${{ steps.version.outputs.name }} (Build #${{ steps.version.outputs.code }})"
+          body: |
+            ## Regain — Automated Release
+
+            **Branch:** `${{ github.ref_name }}`
+            **Commit:** `${{ github.sha }}`
+            **Build:** #${{ steps.version.outputs.code }}
+
+            ### Install
+            Download the APK below and install on any Android 8.0+ device.
+            You may need to allow "Install from unknown sources" in your device settings.
+
+            ### What's in this build
+            - Lockdown timer with foreground service
+            - In-app dialer (Keypad / Contacts / Call Log)
+            - Lock state persists across restarts
+            - Session history with Room DB
+            - Settings with battery optimization guidance
+          draft: false
+          prerelease: false
+          files: dist/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

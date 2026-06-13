@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Regain</string>
+    <string name="lock_channel_name">Regain Lock Service</string>
+    <string name="lock_channel_desc">Shows the active lockdown countdown timer</string>
+    <string name="notification_title">Lockdown Active</string>
+    <string name="start_lockdown">START LOCK DOWN</string>
+    <string name="stop_lock">Stop Lock</string>
+</resources>

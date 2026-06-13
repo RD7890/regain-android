@@ -1,0 +1,6 @@
+-keepattributes SourceFile,LineNumberTable
+-keep class com.ryzix.regain.** { *; }
+-keepclassmembers class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.Entity class *
+-keep @androidx.room.Dao interface *
+-dontwarn kotlin.Unit
