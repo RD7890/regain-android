@@ -46,25 +46,12 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Generate debug keystore (CI signing)
+      - name: Write local.properties (permanent keystore)
         run: |
-          mkdir -p app/signing
-          keytool -genkey -v \
-            -keystore app/signing/signing-key.jks \
-            -alias regain \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Regain, OU=Dev, O=Ryzix, L=IN, ST=IN, C=IN" \
-            -storepass "${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}" \
-            -keypass "${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}"
-
-      - name: Write local.properties
-        run: |
-          echo "signing.storeFile=signing/signing-key.jks" >> local.properties
-          echo "signing.storePassword=${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}" >> local.properties
+          echo "signing.storeFile=signing/regain-release.p12" >> local.properties
+          echo "signing.storePassword=RegainRyzix2024!" >> local.properties
           echo "signing.keyAlias=regain" >> local.properties
-          echo "signing.keyPassword=${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}" >> local.properties
+          echo "signing.keyPassword=RegainRyzix2024!" >> local.properties
 
       - name: Auto-bump versionCode
         id: version
@@ -80,8 +67,8 @@ jobs:
       - name: Assemble Release APK
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD || 'regain_ci_2024' }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || 'regain_ci_2024' }}
+          SIGNING_STORE_PASSWORD: RegainRyzix2024!
+          SIGNING_KEY_PASSWORD: RegainRyzix2024!
         run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Rename APK
@@ -110,14 +97,22 @@ jobs:
 
             ### Install
             Download the APK below and install on any Android 8.0+ device.
-            You may need to allow "Install from unknown sources" in your device settings.
+            Allow "Install from unknown sources" if prompted.
+
+            > **First time upgrading from an older build?**
+            > If you see "package conflict", uninstall the previous version first.
+            > From this build onwards, the signing key is **permanent** — future updates install over each other.
 
             ### What's in this build
+            - Permanent signing key (no more "package conflict" on updates)
+            - Auto re-pins screen immediately when screen-pin is exited
+            - Foreground service relaunches app every 2s while locked
+            - Custom Regain Bold font across entire app
+            - MIUI/Redmi Autostart permission prompt on first launch
             - Lockdown timer with foreground service
             - In-app dialer (Keypad / Contacts / Call Log)
             - Lock state persists across restarts
             - Session history with Room DB
-            - Settings with battery optimization guidance
           draft: false
           prerelease: false
           files: dist/*.apk

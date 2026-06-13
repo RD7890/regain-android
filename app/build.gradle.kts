@@ -29,10 +29,11 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(localProps.getProperty("signing.storeFile", "signing/signing-key.jks"))
+            storeFile = file(localProps.getProperty("signing.storeFile", "signing/regain-release.p12"))
             storePassword = System.getenv("SIGNING_STORE_PASSWORD") ?: localProps.getProperty("signing.storePassword", "")
             keyAlias = localProps.getProperty("signing.keyAlias", "regain")
             keyPassword = System.getenv("SIGNING_KEY_PASSWORD") ?: localProps.getProperty("signing.keyPassword", "")
+            storeType = "PKCS12"
         }
     }
 
