@@ -70,12 +70,12 @@ jobs:
         id: version
         run: |
           BUILD_NUM=${{ github.run_number }}
-          echo "BUILD_NUMBER=$BUILD_NUM" >> $GITHUB_ENV
-          # Extract versionName from build.gradle.kts
-          VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | grep -o '"[^"]*"' | tr -d '"' | head -1 || echo "1.$BUILD_NUM.0")
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-          echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
-          echo "code=$BUILD_NUM" >> $GITHUB_OUTPUT
+          VERSION_NAME="1.0.${BUILD_NUM}"
+          echo "BUILD_NUMBER=${BUILD_NUM}" >> $GITHUB_ENV
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+          echo "name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "code=${BUILD_NUM}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION_NAME} (code ${BUILD_NUM})"
 
       - name: Assemble Release APK
         env:
