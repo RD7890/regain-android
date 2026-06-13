@@ -1,6 +1,5 @@
 package com.ryzix.regain.ui.screens
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -41,10 +39,12 @@ import com.ryzix.regain.ui.components.BottomNavTab
 import com.ryzix.regain.ui.components.RegainBottomNav
 import com.ryzix.regain.ui.theme.BackgroundDark
 import com.ryzix.regain.ui.theme.CardDark
+import com.ryzix.regain.ui.theme.DividerColor
 import com.ryzix.regain.ui.theme.RegainRed
 import com.ryzix.regain.ui.theme.TextMuted
 import com.ryzix.regain.ui.theme.TextPrimary
 import com.ryzix.regain.ui.theme.TextSecondary
+import com.ryzix.regain.utils.MiuiUtils
 import com.ryzix.regain.viewmodel.SettingsViewModel
 
 @Composable
@@ -56,6 +56,7 @@ fun SettingsScreen(
 ) {
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isMiui = MiuiUtils.isMiui()
 
     Scaffold(
         containerColor = BackgroundDark,
@@ -77,11 +78,7 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(16.dp))
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary
-            )
+            Text("Settings", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
             Spacer(Modifier.height(24.dp))
 
             SectionLabel("NOTIFICATIONS")
@@ -113,7 +110,7 @@ fun SettingsScreen(
                     subtitle = "Exempt Regain for reliable background timers",
                     onClick = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(
+                            val intent = android.content.Intent(
                                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                                 Uri.parse("package:${context.packageName}")
                             )
@@ -121,12 +118,24 @@ fun SettingsScreen(
                         }
                     }
                 )
+                if (isMiui) {
+                    DividerLine()
+                    ActionRow(
+                        title = "⚡ MIUI Autostart (Required)",
+                        subtitle = "Enable Autostart in MIUI Security Center so Regain can resume after reboot",
+                        onClick = {
+                            if (!MiuiUtils.openMiuiAutoStart(context)) {
+                                MiuiUtils.openAppSettings(context)
+                            }
+                        }
+                    )
+                }
                 DividerLine()
                 ActionRow(
                     title = "App Settings",
-                    subtitle = "Manage permissions and autostart manually",
+                    subtitle = "Manage permissions manually",
                     onClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        val intent = android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.parse("package:${context.packageName}")
                         }
                         context.startActivity(intent)
@@ -138,13 +147,22 @@ fun SettingsScreen(
             SectionLabel("TROUBLESHOOTING")
             SettingsCard {
                 InfoRow(
-                    title = "Timer not running in background?",
-                    body = "Go to Battery Optimization above and exempt Regain. On some OEM devices (Xiaomi, Huawei, Samsung), also enable Autostart in your system settings."
+                    title = "Timer stops in background?",
+                    body = "1. Tap Battery Optimization above and exempt Regain.\n" +
+                           "2. On Redmi/MIUI: tap 'MIUI Autostart' above and enable it.\n" +
+                           "3. On Samsung: Settings → Apps → Regain → Battery → Unrestricted."
+                )
+                DividerLine()
+                InfoRow(
+                    title = "App unpins too easily?",
+                    body = "Screen pinning (Android's built-in feature) can always be exited via long-press Back+Recents. " +
+                           "Regain re-pins itself automatically the moment you return to it. " +
+                           "For kiosk-level locking, Device Owner mode (MDM) is required — not possible for regular apps."
                 )
                 DividerLine()
                 InfoRow(
                     title = "Lock not resuming after reboot?",
-                    body = "Enable 'Persist Lock on Restart' above and grant boot permission if prompted by your device."
+                    body = "Enable 'Persist Lock on Restart' above. On MIUI, also grant Autostart permission."
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -152,9 +170,7 @@ fun SettingsScreen(
             SectionLabel("ABOUT")
             SettingsCard {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Version", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
@@ -162,9 +178,7 @@ fun SettingsScreen(
                 }
                 DividerLine()
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Developer", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
@@ -176,71 +190,36 @@ fun SettingsScreen(
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp),
-        color = TextMuted,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
+@Composable private fun SectionLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp),
+        color = TextMuted, modifier = Modifier.padding(bottom = 8.dp))
 }
 
-@Composable
-private fun SettingsCard(content: @Composable () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = CardDark,
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp
-    ) {
+@Composable private fun SettingsCard(content: @Composable () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = CardDark,
+        shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp) {
         Column { content() }
     }
     Spacer(Modifier.height(4.dp))
 }
 
-@Composable
-private fun ToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+@Composable private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium), color = TextPrimary)
             Spacer(Modifier.height(2.dp))
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = TextPrimary,
-                checkedTrackColor = RegainRed,
-                uncheckedThumbColor = TextSecondary,
-                uncheckedTrackColor = TextMuted.copy(alpha = 0.3f)
-            )
-        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedThumbColor = TextPrimary, checkedTrackColor = RegainRed,
+                uncheckedThumbColor = TextSecondary, uncheckedTrackColor = TextMuted.copy(alpha = 0.3f)))
     }
 }
 
-@Composable
-private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+@Composable private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium), color = TextPrimary)
             Spacer(Modifier.height(2.dp))
@@ -250,8 +229,7 @@ private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun InfoRow(title: String, body: String) {
+@Composable private fun InfoRow(title: String, body: String) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = TextPrimary)
         Spacer(Modifier.height(4.dp))
@@ -259,13 +237,6 @@ private fun InfoRow(title: String, body: String) {
     }
 }
 
-@Composable
-private fun DividerLine() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .padding(horizontal = 16.dp)
-            .background(com.ryzix.regain.ui.theme.DividerColor.copy(alpha = 0.4f))
-    )
+@Composable private fun DividerLine() {
+    Box(modifier = Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 16.dp).background(DividerColor.copy(alpha = 0.4f)))
 }

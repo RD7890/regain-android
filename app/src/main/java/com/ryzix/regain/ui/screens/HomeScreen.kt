@@ -2,10 +2,9 @@ package com.ryzix.regain.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -25,18 +24,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,16 +52,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ryzix.regain.ui.components.RegainBottomNav
 import com.ryzix.regain.ui.components.BottomNavTab
+import com.ryzix.regain.ui.components.RegainBottomNav
 import com.ryzix.regain.ui.theme.BackgroundDark
 import com.ryzix.regain.ui.theme.CardDark
 import com.ryzix.regain.ui.theme.GreenActive
 import com.ryzix.regain.ui.theme.RegainRed
-import com.ryzix.regain.ui.theme.RegainRedContainer
 import com.ryzix.regain.ui.theme.TextMuted
 import com.ryzix.regain.ui.theme.TextPrimary
 import com.ryzix.regain.ui.theme.TextSecondary
+import com.ryzix.regain.utils.MiuiUtils
 import com.ryzix.regain.viewmodel.HomeViewModel
 
 @Composable
@@ -77,15 +75,54 @@ fun HomeScreen(
     val context = LocalContext.current
     val isLocked = uiState.lockState.isLocked
 
-    var notifPermissionGranted by remember { mutableStateOf(true) }
+    var showMiuiDialog by remember { mutableStateOf(false) }
+
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { notifPermissionGranted = it }
-
+    ) {}
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        // Prompt MIUI users on first open
+        if (MiuiUtils.isMiui()) showMiuiDialog = true
+    }
+
+    if (showMiuiDialog) {
+        AlertDialog(
+            onDismissRequest = { showMiuiDialog = false },
+            title = {
+                Text(
+                    "Enable Autostart",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary
+                )
+            },
+            text = {
+                Text(
+                    "Regain needs Autostart permission to resume the lockdown timer after your device restarts or after the app is killed by MIUI.\n\n" +
+                    "Tap \"Open Settings\" and enable Autostart for Regain.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMiuiDialog = false
+                    MiuiUtils.openMiuiAutoStart(context)
+                }) {
+                    Text("Open Settings", color = RegainRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMiuiDialog = false }) {
+                    Text("Later", color = TextSecondary)
+                }
+            },
+            containerColor = CardDark,
+            titleContentColor = TextPrimary
+        )
     }
 
     Scaffold(
@@ -131,8 +168,7 @@ fun HomeScreen(
                 if (locked) {
                     LockedContent(
                         remainingMillis = uiState.remainingMillis,
-                        onOpenDialer = onOpenDialer,
-                        onStopLock = { vm.stopLockdown() }
+                        onOpenDialer = onOpenDialer
                     )
                 } else {
                     UnlockedContent(
@@ -144,10 +180,9 @@ fun HomeScreen(
                         onDecrementMinutes = { vm.decrementMinutes() },
                         onOpenDialer = onOpenDialer,
                         onStartLock = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                                (context as? Activity)?.startLockTask()
-                            }
                             vm.startLockdown()
+                            val activity = context as? Activity
+                            activity?.startLockTask()
                         }
                     )
                 }
@@ -160,18 +195,15 @@ fun HomeScreen(
 private fun StatusPill(isLocked: Boolean) {
     val bgColor by animateColorAsState(
         targetValue = if (isLocked) RegainRed else Color(0xFF1E3A1E),
-        animationSpec = tween(300),
-        label = "pill_bg"
+        animationSpec = tween(300), label = "pill_bg"
     )
     val textColor by animateColorAsState(
         targetValue = if (isLocked) TextPrimary else GreenActive,
-        animationSpec = tween(300),
-        label = "pill_text"
+        animationSpec = tween(300), label = "pill_text"
     )
     val borderColor by animateColorAsState(
         targetValue = if (isLocked) RegainRed else GreenActive,
-        animationSpec = tween(300),
-        label = "pill_border"
+        animationSpec = tween(300), label = "pill_border"
     )
     Box(
         modifier = Modifier
@@ -210,12 +242,9 @@ private fun UnlockedContent(
         )
         Spacer(Modifier.height(10.dp))
         TimePickerCard(
-            hours = hours,
-            minutes = minutes,
-            onIncrementHours = onIncrementHours,
-            onDecrementHours = onDecrementHours,
-            onIncrementMinutes = onIncrementMinutes,
-            onDecrementMinutes = onDecrementMinutes
+            hours = hours, minutes = minutes,
+            onIncrementHours = onIncrementHours, onDecrementHours = onDecrementHours,
+            onIncrementMinutes = onIncrementMinutes, onDecrementMinutes = onDecrementMinutes
         )
         Spacer(Modifier.height(32.dp))
         Text(
@@ -229,9 +258,7 @@ private fun UnlockedContent(
         Button(
             onClick = onStartLock,
             enabled = hours > 0 || minutes > 0,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp),
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = RegainRed,
@@ -242,8 +269,7 @@ private fun UnlockedContent(
                 text = "START LOCK DOWN",
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 2.sp,
-                    fontSize = 15.sp
+                    letterSpacing = 2.sp, fontSize = 15.sp
                 ),
                 color = TextPrimary
             )
@@ -253,11 +279,7 @@ private fun UnlockedContent(
 }
 
 @Composable
-private fun LockedContent(
-    remainingMillis: Long,
-    onOpenDialer: () -> Unit,
-    onStopLock: () -> Unit
-) {
+private fun LockedContent(remainingMillis: Long, onOpenDialer: () -> Unit) {
     Column {
         CountdownCard(remainingMillis = remainingMillis)
         Spacer(Modifier.height(20.dp))
@@ -289,8 +311,7 @@ private fun CountdownCard(remainingMillis: Long) {
             Text(
                 text = "TIME REMAINING",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    letterSpacing = 2.sp,
-                    fontSize = 11.sp
+                    letterSpacing = 2.sp, fontSize = 11.sp
                 ),
                 color = TextSecondary
             )
@@ -299,8 +320,7 @@ private fun CountdownCard(remainingMillis: Long) {
                 text = "%02d:%02d:%02d".format(h, m, s),
                 style = MaterialTheme.typography.displayLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 52.sp,
-                    letterSpacing = 2.sp
+                    fontSize = 52.sp, letterSpacing = 2.sp
                 ),
                 color = TextPrimary
             )
@@ -311,13 +331,8 @@ private fun CountdownCard(remainingMillis: Long) {
 @Composable
 private fun DialerCard(onOpenDialer: () -> Unit, isLocked: Boolean) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onOpenDialer() },
-        color = CardDark,
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onOpenDialer() },
+        color = CardDark, shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(
@@ -327,8 +342,7 @@ private fun DialerCard(onOpenDialer: () -> Unit, isLocked: Boolean) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (isLocked) "In-App Dialer & Contacts (Tap here)"
-                else "Access Contacts & Calls anytime",
+                text = if (isLocked) "In-App Dialer & Contacts (Tap here)" else "Access Contacts & Calls anytime",
                 style = MaterialTheme.typography.bodyMedium,
                 color = GreenActive
             )
@@ -338,77 +352,49 @@ private fun DialerCard(onOpenDialer: () -> Unit, isLocked: Boolean) {
 
 @Composable
 private fun TimePickerCard(
-    hours: Int,
-    minutes: Int,
-    onIncrementHours: () -> Unit,
-    onDecrementHours: () -> Unit,
-    onIncrementMinutes: () -> Unit,
-    onDecrementMinutes: () -> Unit
+    hours: Int, minutes: Int,
+    onIncrementHours: () -> Unit, onDecrementHours: () -> Unit,
+    onIncrementMinutes: () -> Unit, onDecrementMinutes: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = CardDark,
-        shape = RoundedCornerShape(18.dp),
-        tonalElevation = 2.dp
+        modifier = Modifier.fillMaxWidth(), color = CardDark,
+        shape = RoundedCornerShape(18.dp), tonalElevation = 2.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp, horizontal = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 32.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TimeUnit(
-                value = hours,
-                label = "HRS",
-                onIncrement = onIncrementHours,
-                onDecrement = onDecrementHours,
-                modifier = Modifier.weight(1f)
-            )
+            TimeUnit(hours, "HRS", onIncrementHours, onDecrementHours, Modifier.weight(1f))
             Text(
-                text = ":",
-                style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                ":", style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                color = TextSecondary, modifier = Modifier.padding(horizontal = 8.dp)
             )
-            TimeUnit(
-                value = minutes,
-                label = "MINS",
-                onIncrement = onIncrementMinutes,
-                onDecrement = onDecrementMinutes,
-                modifier = Modifier.weight(1f)
-            )
+            TimeUnit(minutes, "MINS", onIncrementMinutes, onDecrementMinutes, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun TimeUnit(
-    value: Int,
-    label: String,
-    onIncrement: () -> Unit,
-    onDecrement: () -> Unit,
-    modifier: Modifier = Modifier
+    value: Int, label: String,
+    onIncrement: () -> Unit, onDecrement: () -> Unit, modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        StepButton(label = "+", onClick = onIncrement)
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        StepButton("+", onIncrement)
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "%02d".format(value),
+            "%02d".format(value),
             style = MaterialTheme.typography.displayMedium.copy(
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 52.sp
+                fontWeight = FontWeight.ExtraBold, fontSize = 52.sp
             ),
             color = TextPrimary
         )
         Spacer(Modifier.height(6.dp))
-        StepButton(label = "-", onClick = onDecrement)
+        StepButton("-", onDecrement)
         Spacer(Modifier.height(4.dp))
         Text(
-            text = label,
+            label,
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.sp),
             color = TextSecondary
         )
@@ -426,7 +412,7 @@ private fun StepButton(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
+            label,
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
             color = TextPrimary
         )
